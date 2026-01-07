@@ -99,9 +99,51 @@ Create or update `~/.cursor/mcp.json`:
 - `NUTANIX_PASSWORD` - API password (required)
 - `NUTANIX_INSECURE` - Set to "true" for self-signed certificates (optional)
 
+### HTTP Transport (Docker/LibreChat)
+
+This fork adds HTTP transport support, making it suitable for Docker deployments and multi-user environments like [LibreChat](https://www.librechat.ai/).
+
+**Environment Variables for HTTP Transport:**
+- `MCP_TRANSPORT` - Set to `http` or `streamable-http` to enable HTTP mode (default: `stdio`)
+- `MCP_PORT` - HTTP server port (default: `8080`)
+- `MCP_ENDPOINT` - HTTP endpoint path (default: `/mcp`)
+
+**Docker Compose Example:**
+
+```yaml
+services:
+  nutanix-mcp:
+    build:
+      context: ./nutanix-mcp
+      dockerfile: Dockerfile
+    environment:
+      - MCP_TRANSPORT=http
+      - MCP_PORT=8080
+      - MCP_ENDPOINT=/mcp
+      - NUTANIX_ENDPOINT=https://prism-central:9440/
+      - NUTANIX_USERNAME=your-username
+      - NUTANIX_PASSWORD=your-password
+      - NUTANIX_INSECURE=true
+    ports:
+      - "8080:8080"
+```
+
+**LibreChat Configuration (`librechat.yaml`):**
+
+```yaml
+mcpServers:
+  nutanix:
+    type: streamable-http
+    url: http://nutanix-mcp:8080/mcp
+    timeout: 60000
+    initTimeout: 10000
+```
+
 ### Other MCP Clients
 
-This server follows the standard MCP protocol and should work with any MCP client that supports stdio transport. Refer to your client's documentation for configuration instructions.
+This server follows the standard MCP protocol and supports both **stdio** and **HTTP (streamable-http)** transports:
+- **Stdio** (default): Works with Claude Desktop, Claude Code, Cursor, and other local MCP clients
+- **HTTP**: Recommended for Docker deployments, multi-user environments, and production use
 
 ## Usage
 

@@ -13,6 +13,14 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// getEnvWithDefault returns the environment variable value or a default
+func getEnvWithDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 // ToolRegistration holds a tool function and its handler
 type ToolRegistration struct {
 	Func    func() mcp.Tool
@@ -44,33 +52,10 @@ func main() {
 	// Initialize the Prism client only if environment variables are available
 	initializeFromEnvIfAvailable()
 
-	// Define server hooks for logging and debugging
-	hooks := &server.Hooks{}
-	hooks.AddOnError(func(id any, method mcp.MCPMethod, message any, err error) {
-		fmt.Printf("onError: %s, %v, %v, %v\n", method, id, message, err)
-	})
-
 	// Log level based on environment variable
 	debugMode := os.Getenv("DEBUG") != ""
 	if debugMode {
-		hooks.AddBeforeAny(func(id any, method mcp.MCPMethod, message any) {
-			fmt.Printf("beforeAny: %s, %v, %v\n", method, id, message)
-		})
-		hooks.AddOnSuccess(func(id any, method mcp.MCPMethod, message any, result any) {
-			fmt.Printf("onSuccess: %s, %v, %v, %v\n", method, id, message, result)
-		})
-		hooks.AddBeforeInitialize(func(id any, message *mcp.InitializeRequest) {
-			fmt.Printf("beforeInitialize: %v, %v\n", id, message)
-		})
-		hooks.AddAfterInitialize(func(id any, message *mcp.InitializeRequest, result *mcp.InitializeResult) {
-			fmt.Printf("afterInitialize: %v, %v, %v\n", id, message, result)
-		})
-		hooks.AddAfterCallTool(func(id any, message *mcp.CallToolRequest, result *mcp.CallToolResult) {
-			fmt.Printf("afterCallTool: %v, %v, %v\n", id, message, result)
-		})
-		hooks.AddBeforeCallTool(func(id any, message *mcp.CallToolRequest) {
-			fmt.Printf("beforeCallTool: %v, %v\n", id, message)
-		})
+		fmt.Println("Debug mode enabled")
 	}
 
 	// Create a new MCP server
@@ -80,7 +65,6 @@ func main() {
 		server.WithResourceCapabilities(true, true),
 		server.WithPromptCapabilities(true),
 		server.WithLogging(),
-		server.WithHooks(hooks),
 	)
 
 	// Add the prompts
@@ -373,8 +357,32 @@ func main() {
 		s.AddResourceTemplate(registration.ResourceFunc(), registration.ResourceHandler)
 	}
 
-	// Start the server
-	if err := server.ServeStdio(s); err != nil {
-		fmt.Printf("Server error: %v\n", err)
+	// Start the server based on transport type
+	transport := getEnvWithDefault("MCP_TRANSPORT", "stdio")
+
+	switch transport {
+	case "http", "streamable-http":
+		port := getEnvWithDefault("MCP_PORT", "8080")
+		endpoint := getEnvWithDefault("MCP_ENDPOINT", "/mcp")
+		addr := ":" + port
+
+		fmt.Printf("Starting Streamable HTTP server on %s%s\n", addr, endpoint)
+
+		httpServer := server.NewStreamableHTTPServer(s,
+			server.WithEndpointPath(endpoint),
+			server.WithStateLess(true),
+		)
+
+		if err := httpServer.Start(addr); err != nil {
+			fmt.Printf("HTTP server error: %v\n", err)
+			os.Exit(1)
+		}
+	default:
+		// Default to stdio transport
+		fmt.Println("Starting stdio server")
+		if err := server.ServeStdio(s); err != nil {
+			fmt.Printf("Server error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
